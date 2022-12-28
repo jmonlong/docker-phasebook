@@ -1,0 +1,5 @@
+{
+  "phasebook.READS_FILE": "reads.fa",
+  "phasebook.PLATFORM": "hifi",
+  "phasebook.GENOME_SIZE": "small"
+}

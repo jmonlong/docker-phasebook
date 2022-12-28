@@ -1,0 +1,11 @@
+version: 1.2
+workflows:
+  - name: phasebook
+    subclass: WDL
+    description: "Build a phased de novo assembly with Phasebook (https://github.com/phasebook/phasebook)"
+    primaryDescriptorPath: /workflow.wdl
+    testParameterFiles:
+      - /wdl-inputs-examples.json
+    authors:
+      - name: Jean Monlong
+        email: jmonlong@ucsc.edu
