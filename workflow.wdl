@@ -8,24 +8,26 @@ workflow phasebook {
     }
 
     parameter_meta {
-        READS_FILE: "Sequencing reads"
+        READS_FILES: "Array of sequencing reads. All files should be the same type, e.g. all gzipped FASTQ, or all FASTA."
         PLATFORM: "Platform: ont, hifi, or pb. Default is ont."
         GENOME_SIZE: "Genome size: small or large. Default is large."
         PRESET: "Use preset parameters. Default is True"
     }
 
     input {
-        File READS_FILE
+        Array[File] READS_FILES
         String PLATFORM="ont"
         String GENOME_SIZE="large"
+        Int MIN_READ_LENGTH=1000
         Boolean PRESET=true
     }
-
+    
     call runPhasebook {
         input:
-        reads=READS_FILE,
+        reads=READS_FILES,
         platform=PLATFORM,
         genome_size=GENOME_SIZE,
+        min_length=MIN_READ_LENGTH,
         preset=PRESET
     }
 
@@ -38,9 +40,10 @@ workflow phasebook {
 
 task runPhasebook {
     input {
-        File reads
+        Array[File] reads
         String platform = "ont"
         String genome_size = "large"
+        Int min_length = 1000
         Boolean preset = true
         Int memSizeGB = 64
         Int threadCount = 16
@@ -61,7 +64,15 @@ task runPhasebook {
         # to turn off echo do 'set +o xtrace'
         set -o xtrace
 
-        python /build/phasebook/scripts/phasebook.py -i ~{reads} -t ~{threadCount} -p ~{platform} -g ~{genome_size} ~{true="-x" false="" preset}
+        ## merge reads
+        READS=reads.fastx
+        if [[ ~{select_first(reads)} == *.gz ]]
+        then
+            READS=reads.fastx.gz
+        fi
+        cat ~{sep=" " reads} > $READS
+        
+        python /build/phasebook/scripts/phasebook.py -i $READS -t ~{threadCount} -p ~{platform} -g ~{genome_size} --min_read_len ~{min_length} ~{true="-x" false="" preset}
 	>>>
 
 	output {
