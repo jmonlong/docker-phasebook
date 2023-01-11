@@ -40,7 +40,7 @@ RUN conda install python=3.7
 RUN conda install -c bioconda minimap2=2.18 longshot=0.4.1 samtools=1.12 racon=1.4.20 fpa=0.5 whatshap=0.18 bcftools=1.12 
 
 ## install phasebook
-RUN git clone https://github.com/phasebook/phasebook.git
+RUN git clone  https://github.com/jmonlong/phasebook.git
 
 WORKDIR /build/phasebook
 
