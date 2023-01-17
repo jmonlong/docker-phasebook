@@ -51,4 +51,6 @@ RUN apt-get update \
 
 RUN sh install.sh
 
+ADD filterReads.py /build/phasebook/
+
 WORKDIR /home

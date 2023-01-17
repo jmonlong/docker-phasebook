@@ -22,12 +22,23 @@ workflow phasebook {
         Boolean PRESET=true
     }
     
-    call runPhasebook {
+    call prepareReads {
         input:
         reads=READS_FILES,
+        min_length=MIN_READ_LENGTH
+    }
+
+    call overlapReads {
+        input:
+        reads=prepareReads.filtered_reads
+    }
+
+    call runPhasebook {
+        input:
+        reads=prepareReads.filtered_reads,
+        paf=overlapReads.paf,
         platform=PLATFORM,
         genome_size=GENOME_SIZE,
-        min_length=MIN_READ_LENGTH,
         preset=PRESET
     }
 
@@ -38,47 +49,100 @@ workflow phasebook {
     }
 }
 
-task runPhasebook {
+task prepareReads {
     input {
         Array[File] reads
-        String platform = "ont"
-        String genome_size = "large"
         Int min_length = 1000
-        Boolean preset = true
-        Int memSizeGB = 64
-        Int threadCount = 16
-        String dockerContainer = "quay.io/jmonlong/phasebook:latest"
+        Int memSizeGB = 4
+        Int threadCount = 2
+        String dockerContainer = "quay.io/jmonlong/phasebook:v0.1"
     }
 
-    Int diskSizeGB = 10 * round(size(reads, "GB")) + 50
+    Int diskSizeGB = 5 * round(size(reads, "GB")) + 50
     
 	command <<<
-        # Set the exit code of a pipeline to that of the rightmost command
-        # to exit with a non-zero status, or zero if all commands of the pipeline exit
-        set -o pipefail
-        # cause a bash script to exit immediately when a command fails
-        set -e
-        # cause the bash shell to treat unset variables as an error and exit immediately
-        set -u
-        # echo each line of the script to stdout so we can see what is happening
-        # to turn off echo do 'set +o xtrace'
-        set -o xtrace
+        set -eux -o pipefail
 
-        ## merge reads
-        READS=reads.fastx
         if [[ ~{select_first(reads)} == *.gz ]]
         then
-            READS=reads.fastx.gz
+            zcat ~{sep=" " reads} | python3 /build/phasebook/filterReads.py -l ~{min_length} | gzip > reads.fastx.gz            
+        else
+            cat ~{sep=" " reads} | python3 /build/phasebook/filterReads.py -l ~{min_length} | gzip > reads.fastx.gz
         fi
-        cat ~{sep=" " reads} > $READS
-        
-        python /build/phasebook/scripts/phasebook.py -i $READS -t ~{threadCount} -p ~{platform} -g ~{genome_size} --min_read_len ~{min_length} ~{true="-x" false="" preset}
 	>>>
 
 	output {
-		File contigs = "contigs.fa"
+		File filtered_reads = "reads.fastx.gz"
+	}
+
+    runtime {
+        memory: memSizeGB + " GB"
+        cpu: threadCount
+        disks: "local-disk " + diskSizeGB + " SSD"
+        docker: dockerContainer
+        preemptible: 1
+    }
+}
+
+task overlapReads {
+    input {
+        File reads
+        Int memSizeGB = 128
+        Int threadCount = 96
+        String min_ovlp_len = 1000
+        String min_identity = 0.75
+        String dockerContainer = "quay.io/jmonlong/phasebook:v0.1"
+    }
+
+    Int diskSizeGB = 5 * round(size(reads, "GB")) + 50
+    
+	command <<<
+        set -eux -o pipefail
+
+        minimap2 -k 17 -x ava-ont -t ~{threadCount} ~{reads} ~{reads} | \
+            cut -f 1-12 |awk '$11 >= ~{min_ovlp_len} && $10/$11 >= ~{min_identity}' | \
+            fpa drop -i -m | gzip > out.paf.gz
+	>>>
+
+	output {
+		File paf = "out.paf.gz"
+	}
+
+    runtime {
+        memory: memSizeGB + " GB"
+        cpu: threadCount
+        disks: "local-disk " + diskSizeGB + " SSD"
+        docker: dockerContainer
+        preemptible: 1
+    }
+}
+
+task runPhasebook {
+    input {
+        File reads
+        File paf
+        String platform = "ont"
+        String genome_size = "large"
+        Boolean preset = true
+        Int memSizeGB = 256
+        Int threadCount = 96
+        String dockerContainer = "quay.io/jmonlong/phasebook:v0.1"
+    }
+
+    Int diskSizeGB = 10 * round(size(paf, "GB") + size(reads, "GB")) + 50
+    
+	command <<<
+        set -eux -o pipefail
+
+        zcat ~{paf} > ovl.paf
+        
+        python /build/phasebook/scripts/phasebook.py -o results -i ~{reads} --rename False --overlaps ovl.paf -t ~{threadCount} -p ~{platform} -g ~{genome_size} ~{true="-x" false="" preset}
+	>>>
+
+	output {
+		File contigs = "results/contigs.fa"
         File log = "phasebook.log"
-        File gfa = "4.asm_supereads/graph_trimmed.gfa"
+        File gfa = "results/4.asm_supereads/graph_trimmed.gfa"
 	}
 
     runtime {
