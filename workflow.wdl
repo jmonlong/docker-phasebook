@@ -126,10 +126,10 @@ task runPhasebook {
         Boolean preset = true
         Int memSizeGB = 256
         Int threadCount = 96
+        Int diskSizeGB = 20 * round(size(paf, "GB") + size(reads, "GB")) + 50
         String dockerContainer = "quay.io/jmonlong/phasebook:v0.1"
     }
 
-    Int diskSizeGB = 10 * round(size(paf, "GB") + size(reads, "GB")) + 50
     
 	command <<<
         set -eux -o pipefail
