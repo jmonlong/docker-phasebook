@@ -126,7 +126,7 @@ task runPhasebook {
         Boolean preset = true
         Int memSizeGB = 256
         Int threadCount = 96
-        Int diskSizeGB = 40 * round(size(paf, "GB") + size(reads, "GB")) + 50
+        Int diskSizeGB = 80 * round(size(paf, "GB") + size(reads, "GB")) + 50
         String dockerContainer = "quay.io/jmonlong/phasebook:v0.1"
     }
 
@@ -150,6 +150,5 @@ task runPhasebook {
         cpu: threadCount
         disks: "local-disk " + diskSizeGB + " SSD"
         docker: dockerContainer
-        preemptible: 1
     }
 }
